@@ -6,11 +6,33 @@ import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.room.Room
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var databaseHelper: DatabaseHelper
+
+    private lateinit var db: AppDatabase
     private lateinit var txtResults: TextView
+
+
+    // PARA EL ROOM HAY QUE MODIFICAR EL GRADLE KTS MODULE APP Y AGREGAR LOS PLUGINS DE ROOM
+    // Y KAPT
+    // EN EL GRADLE KTS MODULE APP AGREGAR LAS DEPENDENCIAS DE ROOM
+    // EN PLUGINS AGREGAR
+    // id("org.jetbrains.kotlin.kapt")
+    // EN DEPENDENCIAS AGREGAR
+    //implementation("androidx.room:room-runtime:2.5.2")
+    // kapt("androidx.room:room-compiler:2.5.2")
+    // implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.5.1")
+    // implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
+
+
+    //Despues de esto genero una base de datos nueva, en nuestro folder del proyecto debe ser kotlin class
+    // y le ponemos el nombre de la base de datos, en este caso AppDatabase, generamos los archivos que dicen ahi dentro
 
 
     @SuppressLint("Range")
@@ -18,7 +40,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        databaseHelper = DatabaseHelper(this)
+
+        db= Room.databaseBuilder(applicationContext, AppDatabase::class.java, "MyDatabase.db").build()
 
         val edtName = findViewById<EditText>(R.id.edtName)
         val edtAge = findViewById<EditText>(R.id.edtAge)
@@ -35,25 +58,43 @@ class MainActivity : AppCompatActivity() {
             val age = edtAge.text.toString().toIntOrNull()
 
             if (name.isNotBlank() && age != null) {
-                val success = databaseHelper.addUser(name, age)
-                showToast(success)
+                //val success = databaseHelper.addUser(name, age)
+                //showToast(success)
+            GlobalScope.launch(Dispatchers.IO) {//aqui mando a llamar el hilo----------
+                val user = User(name = name, age = age) // estp es nuevo
+                val result = db.userDao().insertUser(user) // esto es nuevo
+                launch (Dispatchers.Main){
+                    showToast(result != -1L) // esto es nuevo
+                }
+            }
+
             } else {
                 Toast.makeText(this, "Favor de llenar todos los campos!", Toast.LENGTH_SHORT).show()
             }
         }
 
         btnRetrieve.setOnClickListener {
-            val cursor = databaseHelper.getAllUsers()
-            val output = StringBuilder()
-            while (cursor.moveToNext()) {
-                val id = cursor.getInt(cursor.getColumnIndex("id"))
-                val name = cursor.getString(cursor.getColumnIndex("name"))
-                val age = cursor.getInt(cursor.getColumnIndex("age"))
-                output.append("ID: $id, Nombre: $name, Edad: $age\n")
+
+            GlobalScope.launch(Dispatchers.IO) {//aqui mando a llamar el hilo----------
+                val users = db.userDao().getAllUsers() // esto es nuevo
+
+                launch(Dispatchers.Main)
+                {
+                    val output = StringBuilder() // esto es nuevo
+
+
+
+                for (user in users) { // esto es nuevo
+                    output.append("Id: ${user.id}, Nombre: ${user.name}, Edad: ${user.age}\n")
+                } // esto es nuevo
+
+
+                txtResults.text = output.toString()
             }
-            txtResults.text = output.toString()
-            cursor.close()
         }
+
+        }
+
 
         btnUpdate.setOnClickListener {
             val id = edtUserId.text.toString().toIntOrNull()
@@ -61,8 +102,13 @@ class MainActivity : AppCompatActivity() {
             val age = edtAge.text.toString().toIntOrNull()
 
             if (id != null && name.isNotBlank() && age != null) {
-                val success = databaseHelper.updateUser(id, name, age)
-                showToast(success)
+
+                GlobalScope.launch(Dispatchers.IO) {//aqui mando a llamar el hilo----------
+                val user = User(id=id,name=name,age= age) // esto es nuevo
+                val result = db.userDao().updateUser(user) // esto es nuevo
+                launch(Dispatchers.Main)
+                    { showToast(result > 0) }
+                }
             } else {
                 Toast.makeText(this, "Favor de llenar todos los campos!", Toast.LENGTH_SHORT).show()
             }
@@ -72,8 +118,13 @@ class MainActivity : AppCompatActivity() {
             val id = edtUserId.text.toString().toIntOrNull()
 
             if (id != null) {
-                val success = databaseHelper.deleteUser(id)
-                showToast(success)
+                GlobalScope.launch(Dispatchers.IO) {//aqui mando a llamar el hilo----------
+                    val user = User(id = id, name = "", age = 0) // esto es nuevo
+                    val result = db.userDao().deleteUser(user) // esto es nuevo
+                    launch(Dispatchers.Main) {
+                        showToast(result > 0)
+                    }
+                }
             } else {
                 Toast.makeText(this, "Favor de introducir un id valido!", Toast.LENGTH_SHORT).show()
             }
@@ -88,3 +139,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+
+// si nos da error en la version cambiamos las versiones en el gradle kts module app
+// compileOPtions{
+// sourceCompatibility = JavaVersion.VERSION_17
+// targetCompatibility = JavaVersion.VERSION_17
+// }
+//
+// kotlinOptions{
+// jvmTarget = "17"
+// }
+//
+
+
+// ademas agregamos cada que se ejecute la bd , un launch para que se ejecute en un hilo diferente
